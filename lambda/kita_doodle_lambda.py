@@ -284,6 +284,8 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
 
             log.info("Clicked session row.")
             page.wait_for_timeout(500)
+            screenshots = []
+            _take_screenshot(page, "/tmp/sien18_1_session_selected.png", "1 — session selected") and screenshots.append("/tmp/sien18_1_session_selected.png")
 
             continue_btn = (
                 page.query_selector("button:has-text('Continue')")
@@ -331,6 +333,8 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
                     textarea.fill(CHILD_NAME)
                     log.info(f"Custom question filled with '{CHILD_NAME}'.")
 
+            _take_screenshot(page, "/tmp/sien18_2_form_filled.png", "2 — form filled") and screenshots.append("/tmp/sien18_2_form_filled.png")
+
             confirm_btn = (
                 page.query_selector("button:has-text('Buchung bestätigen')")
                 or page.query_selector("button:has-text('Confirm booking')")
@@ -348,6 +352,7 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
                 page.wait_for_load_state("networkidle", timeout=8_000)
             except PWTimeout:
                 pass
+            _take_screenshot(page, "/tmp/sien18_3_booking_confirmed.png", "3 — booking confirmed") and screenshots.append("/tmp/sien18_3_booking_confirmed.png")
 
             body_text = page.inner_text("body").lower()
 
@@ -356,6 +361,7 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
                 log.info("Already registered (prior booking detected on confirm page).")
                 result["dalia_registered"] = True
                 result["action"] = "already_registered"
+                result["screenshots"] = screenshots
                 return result
 
             success_phrases = ["signed up", "you registered as", "angemeldet", "confirmed",
@@ -368,10 +374,22 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
                 log.warning(f"Page text inconclusive after submit: {body_text[:200]!r}")
                 result["action"] = "submitted_unverified"
 
+            result["screenshots"] = screenshots
             return result
 
         finally:
             browser.close()
+
+
+def _take_screenshot(page, path: str, label: str) -> str | None:
+    """Capture a full-page screenshot to /tmp, return the path or None on failure."""
+    try:
+        page.screenshot(path=path, full_page=True)
+        log.info(f"Screenshot saved: {label}")
+        return path
+    except Exception as exc:
+        log.warning(f"Screenshot failed ({label}): {exc}")
+        return None
 
 
 def _parse_seats(text: str) -> bool | None:
@@ -397,6 +415,8 @@ def _wait_and_confirm(service):
 
 def send_notification(service, result: dict, doodle_url: str):
     today = datetime.now().strftime("%A, %d %B %Y")
+    screenshots = result.get("screenshots", [])
+
     msg = email.message.EmailMessage()
     msg["From"] = "me"
     msg["To"] = ", ".join(NOTIFY_RECIPIENTS)
@@ -407,12 +427,29 @@ def send_notification(service, result: dict, doodle_url: str):
         f"Datum:   {today}\n"
         f"Status:  {result['action']}\n"
         f"Doodle:  {doodle_url}\n\n"
-        f"Diese Nachricht wurde automatisch von Sien-18 gesendet.\n"
+        + (f"Screenshots ({len(screenshots)}) sind als Anhang beigefügt.\n\n" if screenshots else "")
+        + f"Diese Nachricht wurde automatisch von Sien-18 gesendet.\n"
     )
+
+    labels = {
+        "/tmp/sien18_1_session_selected.png": "1_session_selected.png",
+        "/tmp/sien18_2_form_filled.png":      "2_form_filled.png",
+        "/tmp/sien18_3_booking_confirmed.png": "3_booking_confirmed.png",
+    }
+    for path in screenshots:
+        p = Path(path)
+        if p.exists():
+            msg.add_attachment(
+                p.read_bytes(),
+                maintype="image",
+                subtype="png",
+                filename=labels.get(path, p.name),
+            )
+
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
     try:
         service.users().messages().send(userId="me", body={"raw": raw}).execute()
-        log.info(f"Notification sent to {NOTIFY_RECIPIENTS}.")
+        log.info(f"Notification with {len(screenshots)} screenshot(s) sent to {NOTIFY_RECIPIENTS}.")
     except Exception as exc:
         log.error(f"Failed to send notification: {exc}")
 
