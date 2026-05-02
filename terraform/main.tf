@@ -6,8 +6,12 @@ terraform {
       version = "~> 5.40"
     }
   }
-  # Local backend — state lives in terraform.tfstate in CloudShell's persistent home dir
-  backend "local" {}
+  backend "s3" {
+    bucket  = "sien-18-tf-207844652117"
+    key     = "terraform.tfstate"
+    region  = "eu-west-1"
+    encrypt = true
+  }
 }
 
 provider "aws" {
