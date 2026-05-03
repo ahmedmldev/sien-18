@@ -1,0 +1,21 @@
+# Secrets — never commit
+credentials.json
+token.json
+terraform/terraform.tfvars
+terraform.tfvars
+
+# Terraform local cache
+terraform/.terraform/
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+*.log
