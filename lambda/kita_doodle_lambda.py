@@ -35,10 +35,13 @@ from datetime import datetime
 from pathlib import Path
 
 # ── logging ────────────────────────────────────────────────────────────────────
+# Lambda pre-configures the root logger; basicConfig is a no-op unless we force it.
+logging.getLogger().setLevel(logging.INFO)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-7s  %(message)s",
     datefmt="%H:%M:%S",
+    force=True,
 )
 log = logging.getLogger("kita_doodle")
 
@@ -358,25 +361,27 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
                             label = lbl_el.inner_text()
                 if not label:
                     label = page.evaluate("""el => {
-                        const generic = new Set(['deine antwort', 'ihre antwort', 'your answer']);
+                        const generic = new Set(['deine antwort', 'ihre antwort', 'your answer', 'enter your answer']);
+                        function text(node) {
+                            const c = node.cloneNode(true);
+                            c.querySelectorAll('input,textarea,button,script,style,svg').forEach(n => n.remove());
+                            return (c.textContent || '').replace(/\\s+/g, ' ').trim();
+                        }
                         let node = el;
-                        for (let i = 0; i < 6; i++) {
+                        for (let i = 0; i < 8; i++) {
                             node = node.parentElement;
                             if (!node) break;
-                            // Previous siblings often carry the question label in Doodle
                             let sib = node.previousElementSibling;
                             while (sib) {
-                                const t = sib.innerText.trim();
+                                const t = text(sib);
                                 if (t && t.length < 100 && !generic.has(t.toLowerCase())) return t;
                                 sib = sib.previousElementSibling;
                             }
-                            // Own text (minus inputs) as fallback
-                            const clone = node.cloneNode(true);
-                            clone.querySelectorAll('input,textarea,button').forEach(n => n.remove());
-                            const lines = clone.innerText.split('\\n')
+                            const t = text(node);
+                            const parts = t.split(/\\s{2,}|\\n/)
                                 .map(s => s.trim())
                                 .filter(s => s && !generic.has(s.toLowerCase()));
-                            if (lines.length > 0 && lines.join(' ').length < 200) return lines.join(' ');
+                            if (parts.length > 0 && parts.join(' ').length < 200) return parts[0];
                         }
                         return '';
                     }""", textarea)
@@ -413,16 +418,13 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
             page.wait_for_timeout(200)
             # Expand "Fragen anzeigen" so submitted answers are visible in the screenshot
             try:
-                clicked = page.evaluate("""() => {
-                    const el = [...document.querySelectorAll('button,a,div,span,[role]')]
-                        .find(e => /fragen|questions/i.test(e.textContent.trim())
-                                   && e.textContent.trim().length < 60);
-                    if (el) { el.click(); return true; }
-                    return false;
-                }""")
-                if clicked:
+                fragen = page.locator("text=/fragen anzeigen|show questions/i").first
+                if fragen.count() > 0:
+                    fragen.click()
                     page.wait_for_timeout(500)
                     log.info("Expanded 'Fragen anzeigen'.")
+                else:
+                    log.warning("'Fragen anzeigen' button not found.")
             except Exception:
                 pass
             _take_screenshot(page, "/tmp/sien18_3_booking_confirmed.png", "3 — booking confirmed") and screenshots.append("/tmp/sien18_3_booking_confirmed.png")
