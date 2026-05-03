@@ -342,10 +342,13 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
             for textarea in page.query_selector_all("textarea"):
                 if textarea.input_value() != "":
                     continue
+                _generic = {"deine antwort", "ihre antwort", "your answer", "enter your answer"}
+                _aria = (textarea.get_attribute("aria-label") or "").strip()
+                _ph   = (textarea.get_attribute("placeholder") or "").strip()
                 label = (
-                    textarea.get_attribute("aria-label")
-                    or textarea.get_attribute("placeholder")
-                    or ""
+                    _aria if _aria and _aria.lower() not in _generic else
+                    _ph   if _ph   and _ph.lower()   not in _generic else
+                    ""
                 )
                 if not label:
                     field_id = textarea.get_attribute("id")
@@ -410,11 +413,14 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
             page.wait_for_timeout(200)
             # Expand "Fragen anzeigen" so submitted answers are visible in the screenshot
             try:
-                fragen_btn = page.get_by_text(
-                    re.compile(r"fragen|questions", re.IGNORECASE)
-                ).first
-                if fragen_btn.count() > 0:
-                    fragen_btn.click()
+                clicked = page.evaluate("""() => {
+                    const el = [...document.querySelectorAll('button,a,div,span,[role]')]
+                        .find(e => /fragen|questions/i.test(e.textContent.trim())
+                                   && e.textContent.trim().length < 60);
+                    if (el) { el.click(); return true; }
+                    return false;
+                }""")
+                if clicked:
                     page.wait_for_timeout(500)
                     log.info("Expanded 'Fragen anzeigen'.")
             except Exception:
