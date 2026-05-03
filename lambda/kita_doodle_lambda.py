@@ -285,6 +285,10 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
             log.info("Clicked session row.")
             page.wait_for_timeout(500)
             screenshots = []
+            slot = page.query_selector('[data-testid="time-slot-item-container"]')
+            if slot:
+                slot.scroll_into_view_if_needed()
+                page.wait_for_timeout(200)
             _take_screenshot(page, "/tmp/sien18_1_session_selected.png", "1 — session selected") and screenshots.append("/tmp/sien18_1_session_selected.png")
 
             continue_btn = (
@@ -345,14 +349,25 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
                             label = lbl_el.inner_text()
                 if not label:
                     label = page.evaluate("""el => {
-                        let p = el.parentElement;
-                        for (let i = 0; i < 4; i++) {
-                            if (!p) break;
-                            const clone = p.cloneNode(true);
+                        const generic = new Set(['deine antwort', 'ihre antwort', 'your answer']);
+                        let node = el;
+                        for (let i = 0; i < 6; i++) {
+                            node = node.parentElement;
+                            if (!node) break;
+                            // Previous siblings often carry the question label in Doodle
+                            let sib = node.previousElementSibling;
+                            while (sib) {
+                                const t = sib.innerText.trim();
+                                if (t && t.length < 100 && !generic.has(t.toLowerCase())) return t;
+                                sib = sib.previousElementSibling;
+                            }
+                            // Own text (minus inputs) as fallback
+                            const clone = node.cloneNode(true);
                             clone.querySelectorAll('input,textarea,button').forEach(n => n.remove());
-                            const text = clone.innerText.trim();
-                            if (text && text.length < 150) return text;
-                            p = p.parentElement;
+                            const lines = clone.innerText.split('\\n')
+                                .map(s => s.trim())
+                                .filter(s => s && !generic.has(s.toLowerCase()));
+                            if (lines.length === 1 && lines[0].length < 100) return lines[0];
                         }
                         return '';
                     }""", textarea)
@@ -364,6 +379,8 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
                     textarea.fill(CHILD_NAME)
                     log.info(f"Custom question (child name) filled — label: {label!r}.")
 
+            page.evaluate("window.scrollTo(0, 0)")
+            page.wait_for_timeout(200)
             _take_screenshot(page, "/tmp/sien18_2_form_filled.png", "2 — form filled") and screenshots.append("/tmp/sien18_2_form_filled.png")
 
             confirm_btn = (
@@ -383,6 +400,8 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
                 page.wait_for_load_state("networkidle", timeout=8_000)
             except PWTimeout:
                 pass
+            page.evaluate("window.scrollTo(0, 0)")
+            page.wait_for_timeout(200)
             _take_screenshot(page, "/tmp/sien18_3_booking_confirmed.png", "3 — booking confirmed") and screenshots.append("/tmp/sien18_3_booking_confirmed.png")
 
             body_text = page.inner_text("body").lower()
@@ -413,9 +432,8 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
 
 
 def _take_screenshot(page, path: str, label: str) -> str | None:
-    """Capture a full-page screenshot to /tmp, return the path or None on failure."""
     try:
-        page.screenshot(path=path, full_page=True)
+        page.screenshot(path=path, full_page=False)
         log.info(f"Screenshot saved: {label}")
         return path
     except Exception as exc:
