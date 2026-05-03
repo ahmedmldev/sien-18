@@ -42,13 +42,19 @@ logging.basicConfig(
 )
 log = logging.getLogger("kita_doodle")
 
-# ── config from env vars (defaults match local version) ───────────────────────
-CHILD_NAME        = os.environ.get("CHILD_NAME",        "Child")
-ATTENDEE_NAME     = os.environ.get("ATTENDEE_NAME",     "Your Full Name")
-ATTENDEE_EMAIL    = os.environ.get("ATTENDEE_EMAIL",    "your@email.com")
-NOTIFY_RECIPIENTS = os.environ.get("NOTIFY_RECIPIENTS", "your@email.com").split(",")
-KITA_SENDER       = os.environ.get("KITA_SENDER",       "kita@example.de")
-KITA_SUBJECT_KEYWORDS = os.environ.get("KITA_SUBJECT_KEYWORDS", "Notbetreuung,Doodle").split(",")
+# ── config from env vars (required — injected by Terraform / GitHub Actions) ──
+def _require_env(name: str) -> str:
+    val = os.environ.get(name, "")
+    if not val:
+        raise RuntimeError(f"Required environment variable {name!r} is not set.")
+    return val
+
+CHILD_NAME            = _require_env("CHILD_NAME")
+ATTENDEE_NAME         = _require_env("ATTENDEE_NAME")
+ATTENDEE_EMAIL        = _require_env("ATTENDEE_EMAIL")
+NOTIFY_RECIPIENTS     = _require_env("NOTIFY_RECIPIENTS").split(",")
+KITA_SENDER           = _require_env("KITA_SENDER")
+KITA_SUBJECT_KEYWORDS = _require_env("KITA_SUBJECT_KEYWORDS").split(",")
 
 GMAIL_CREDENTIALS_PARAM = os.environ.get("GMAIL_CREDENTIALS_PARAM", "/kita-bot/gmail-credentials")
 GMAIL_TOKEN_PARAM       = os.environ.get("GMAIL_TOKEN_PARAM",       "/kita-bot/gmail-token")
@@ -420,10 +426,10 @@ def send_notification(service, result: dict, doodle_url: str):
     msg = email.message.EmailMessage()
     msg["From"] = "me"
     msg["To"] = ", ".join(NOTIFY_RECIPIENTS)
-    msg["Subject"] = f"Sien-18: Child ist für heute angemeldet ✓ ({today})"
+    msg["Subject"] = f"Sien-18: {CHILD_NAME} ist für heute angemeldet ✓ ({today})"
     msg.set_content(
         f"Hallo,\n\n"
-        f"Sien-18 hat Child erfolgreich für die heutige Kita-Notbetreuung angemeldet.\n\n"
+        f"Sien-18 hat {CHILD_NAME} erfolgreich für die heutige Kita-Notbetreuung angemeldet.\n\n"
         f"Datum:   {today}\n"
         f"Status:  {result['action']}\n"
         f"Doodle:  {doodle_url}\n\n"
