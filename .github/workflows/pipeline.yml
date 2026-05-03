@@ -98,6 +98,9 @@ jobs:
             --image-uri ${{ steps.build.outputs.image }} \
             --region $AWS_REGION
 
+      - name: Wait for Lambda update to complete
+        run: aws lambda wait function-updated --function-name $FUNCTION_NAME --region $AWS_REGION
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
