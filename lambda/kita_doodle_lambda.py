@@ -373,7 +373,7 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
                             const lines = clone.innerText.split('\\n')
                                 .map(s => s.trim())
                                 .filter(s => s && !generic.has(s.toLowerCase()));
-                            if (lines.length === 1 && lines[0].length < 100) return lines[0];
+                            if (lines.length > 0 && lines.join(' ').length < 200) return lines.join(' ');
                         }
                         return '';
                     }""", textarea)
@@ -410,8 +410,8 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
             page.wait_for_timeout(200)
             # Expand "Fragen anzeigen" so submitted answers are visible in the screenshot
             try:
-                fragen_btn = page.locator("button, [role='button']").filter(
-                    has_text=re.compile(r"fragen|questions", re.IGNORECASE)
+                fragen_btn = page.get_by_text(
+                    re.compile(r"fragen|questions", re.IGNORECASE)
                 ).first
                 if fragen_btn.count() > 0:
                     fragen_btn.click()
