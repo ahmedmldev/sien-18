@@ -402,6 +402,17 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
                 pass
             page.evaluate("window.scrollTo(0, 0)")
             page.wait_for_timeout(200)
+            # Expand "Fragen anzeigen" so submitted answers are visible in the screenshot
+            try:
+                fragen_btn = page.locator("button, [role='button']").filter(
+                    has_text=re.compile(r"fragen|questions", re.IGNORECASE)
+                ).first
+                if fragen_btn.count() > 0:
+                    fragen_btn.click()
+                    page.wait_for_timeout(500)
+                    log.info("Expanded 'Fragen anzeigen'.")
+            except Exception:
+                pass
             _take_screenshot(page, "/tmp/sien18_3_booking_confirmed.png", "3 — booking confirmed") and screenshots.append("/tmp/sien18_3_booking_confirmed.png")
 
             body_text = page.inner_text("body").lower()
