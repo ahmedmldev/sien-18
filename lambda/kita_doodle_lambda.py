@@ -352,7 +352,9 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
                     if field_id:
                         lbl_el = page.query_selector(f"label[for='{field_id}']")
                         if lbl_el:
-                            label = lbl_el.inner_text()
+                            lbl_text = (lbl_el.inner_text() or "").strip()
+                            if lbl_text.lower() not in _generic:
+                                label = lbl_text
                 if not label:
                     label = page.evaluate("""el => {
                         const generic = new Set(['deine antwort', 'ihre antwort', 'your answer', 'enter your answer']);
