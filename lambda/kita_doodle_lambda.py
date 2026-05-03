@@ -376,7 +376,7 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
                     textarea.fill(ATTENDEE_EMAIL)
                     log.info(f"Custom question (email) filled — label: {label!r}.")
                 else:
-                    textarea.fill(CHILD_NAME)
+                    textarea.fill(ATTENDEE_NAME)
                     log.info(f"Custom question (child name) filled — label: {label!r}.")
 
             page.evaluate("window.scrollTo(0, 0)")
