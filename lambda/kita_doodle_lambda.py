@@ -333,11 +333,42 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
                     log.info(f"Email filled ({sel}).")
                     break
 
-            # Kita organiser may add a mandatory "Name Ihres Kind" custom question (textarea)
+            # Kita organiser custom questions (order-independent, fields are optional)
+            # Label detection: aria-label → placeholder → <label for=id> → nearest ancestor text
             for textarea in page.query_selector_all("textarea"):
-                if textarea.input_value() == "":
+                if textarea.input_value() != "":
+                    continue
+                label = (
+                    textarea.get_attribute("aria-label")
+                    or textarea.get_attribute("placeholder")
+                    or ""
+                )
+                if not label:
+                    field_id = textarea.get_attribute("id")
+                    if field_id:
+                        lbl_el = page.query_selector(f"label[for='{field_id}']")
+                        if lbl_el:
+                            label = lbl_el.inner_text()
+                if not label:
+                    label = page.evaluate("""el => {
+                        let p = el.parentElement;
+                        for (let i = 0; i < 4; i++) {
+                            if (!p) break;
+                            const clone = p.cloneNode(true);
+                            clone.querySelectorAll('input,textarea,button').forEach(n => n.remove());
+                            const text = clone.innerText.trim();
+                            if (text && text.length < 150) return text;
+                            p = p.parentElement;
+                        }
+                        return '';
+                    }""", textarea)
+                label_lower = label.lower()
+                if "mail" in label_lower:
+                    textarea.fill(ATTENDEE_EMAIL)
+                    log.info(f"Custom question (email) filled — label: {label!r}.")
+                else:
                     textarea.fill(CHILD_NAME)
-                    log.info(f"Custom question filled with '{CHILD_NAME}'.")
+                    log.info(f"Custom question (child name) filled — label: {label!r}.")
 
             _take_screenshot(page, "/tmp/sien18_2_form_filled.png", "2 — form filled") and screenshots.append("/tmp/sien18_2_form_filled.png")
 
@@ -464,9 +495,10 @@ def send_notification(service, result: dict, doodle_url: str):
 
 def handler(event: dict, context) -> dict:
     attempt = event.get("attempt", 0)
-    url     = event.get("url") or None
+    # Event values take precedence; env vars allow direct Lambda console testing
+    url     = event.get("url") or os.environ.get("URL") or None
     debug   = bool(event.get("debug", False))
-    dry_run = bool(event.get("dry_run", False))
+    dry_run = bool(event.get("dry_run", False)) or os.environ.get("DRY_RUN", "").lower() == "true"
 
     log.info(f"=== Sien-18 starting (attempt {attempt}) ===")
 
