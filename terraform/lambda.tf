@@ -22,6 +22,8 @@ resource "aws_lambda_function" "kita_bot" {
       KITA_SUBJECT_KEYWORDS    = var.kita_subject_keywords
       GMAIL_CREDENTIALS_PARAM = aws_ssm_parameter.gmail_credentials.name
       GMAIL_TOKEN_PARAM       = aws_ssm_parameter.gmail_token.name
+      URL                     = var.test_doodle_url
+      DRY_RUN                 = "false"
     }
   }
 
