@@ -420,10 +420,18 @@ def check_and_register(doodle_url: str, dry_run: bool = False, debug: bool = Fal
             page.wait_for_timeout(200)
             # Expand "Fragen anzeigen" so submitted answers are visible in the screenshot
             try:
-                fragen = page.locator("text=/fragen anzeigen|show questions/i").first
-                if fragen.count() > 0:
-                    fragen.click()
-                    page.wait_for_timeout(500)
+                expanded = page.evaluate("""() => {
+                    for (const el of document.querySelectorAll('button,a,summary,[role="button"],[onclick]')) {
+                        if (/fragen anzeigen|show questions/i.test((el.textContent || '').trim())) {
+                            el.scrollIntoView({block: 'center'});
+                            el.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+                            return true;
+                        }
+                    }
+                    return false;
+                }""")
+                if expanded:
+                    page.wait_for_timeout(1000)
                     log.info("Expanded 'Fragen anzeigen'.")
                 else:
                     log.warning("'Fragen anzeigen' button not found.")
