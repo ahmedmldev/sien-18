@@ -121,7 +121,7 @@ resource "aws_iam_role_policy" "lambda_sfn_read" {
         # DescribeExecution requires execution ARN (not state machine ARN)
         Effect   = "Allow"
         Action   = "states:DescribeExecution"
-        Resource = replace(aws_sfn_state_machine.kita_bot.arn, ":stateMachine:", ":execution:") + ":*"
+        Resource = "${replace(aws_sfn_state_machine.kita_bot.arn, ":stateMachine:", ":execution:")}:*"
       },
       {
         Effect   = "Allow"
