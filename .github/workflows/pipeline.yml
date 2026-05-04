@@ -42,11 +42,6 @@ jobs:
           SCHEDULE_CRON:         ${{ secrets.SCHEDULE_CRON }}
           SUMMARY_SCHEDULE_CRON: ${{ secrets.SUMMARY_SCHEDULE_CRON }}
         run: |
-          # Pre-compute cron values so ( and ) in defaults don't confuse bash heredoc expansion
-          _sched="${SCHEDULE_CRON}"
-          [ -z "$_sched" ] && _sched="cron(19 7 ? * MON-FRI *)"
-          _summary="${SUMMARY_SCHEDULE_CRON}"
-          [ -z "$_summary" ] && _summary="cron(0 17 ? * FRI *)"
           cat > terraform.tfvars <<EOF
           child_name            = "${{ secrets.CHILD_NAME }}"
           attendee_name         = "${{ secrets.ATTENDEE_NAME }}"
@@ -54,9 +49,11 @@ jobs:
           notify_recipients     = "${{ secrets.NOTIFY_RECIPIENTS }}"
           kita_sender           = "${{ secrets.KITA_SENDER }}"
           kita_subject_keywords = "${{ secrets.KITA_SUBJECT_KEYWORDS }}"
-          schedule_cron         = "$_sched"
-          summary_schedule_cron = "$_summary"
           EOF
+          # Optional overrides — omit when secret is unset so Terraform uses variable defaults
+          [ -n "${SCHEDULE_CRON}" ]         && printf 'schedule_cron         = "%s"\n' "${SCHEDULE_CRON}"         >> terraform.tfvars
+          [ -n "${SUMMARY_SCHEDULE_CRON}" ] && printf 'summary_schedule_cron = "%s"\n' "${SUMMARY_SCHEDULE_CRON}" >> terraform.tfvars
+          true
 
       - name: Terraform Plan
         working-directory: terraform
@@ -124,11 +121,6 @@ jobs:
           SCHEDULE_CRON:         ${{ secrets.SCHEDULE_CRON }}
           SUMMARY_SCHEDULE_CRON: ${{ secrets.SUMMARY_SCHEDULE_CRON }}
         run: |
-          # Pre-compute cron values so ( and ) in defaults don't confuse bash heredoc expansion
-          _sched="${SCHEDULE_CRON}"
-          [ -z "$_sched" ] && _sched="cron(19 7 ? * MON-FRI *)"
-          _summary="${SUMMARY_SCHEDULE_CRON}"
-          [ -z "$_summary" ] && _summary="cron(0 17 ? * FRI *)"
           cat > terraform.tfvars <<EOF
           child_name            = "${{ secrets.CHILD_NAME }}"
           attendee_name         = "${{ secrets.ATTENDEE_NAME }}"
@@ -136,9 +128,11 @@ jobs:
           notify_recipients     = "${{ secrets.NOTIFY_RECIPIENTS }}"
           kita_sender           = "${{ secrets.KITA_SENDER }}"
           kita_subject_keywords = "${{ secrets.KITA_SUBJECT_KEYWORDS }}"
-          schedule_cron         = "$_sched"
-          summary_schedule_cron = "$_summary"
           EOF
+          # Optional overrides — omit when secret is unset so Terraform uses variable defaults
+          [ -n "${SCHEDULE_CRON}" ]         && printf 'schedule_cron         = "%s"\n' "${SCHEDULE_CRON}"         >> terraform.tfvars
+          [ -n "${SUMMARY_SCHEDULE_CRON}" ] && printf 'summary_schedule_cron = "%s"\n' "${SUMMARY_SCHEDULE_CRON}" >> terraform.tfvars
+          true
 
       - name: Terraform Apply
         working-directory: terraform

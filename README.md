@@ -91,7 +91,7 @@ In the repository **Settings → Secrets and variables → Actions**, add:
 | `KITA_SENDER` | From address of the Kita Notbetreuung email |
 | `KITA_SUBJECT_KEYWORDS` | Comma-separated subject keywords (e.g. `Notbetreuung,Doodle`) |
 | `SCHEDULE_CRON` | EventBridge cron for daily registration (default: `cron(19 7 ? * MON-FRI *)`) |
-| `SUMMARY_SCHEDULE_CRON` | EventBridge cron for Friday weekly summary (default: `cron(0 17 ? * FRI *)`) |
+| `SUMMARY_SCHEDULE_CRON` | EventBridge cron for Friday weekly summary (default: `cron(0 17 ? * 6 *)`) |
 
 ---
 
@@ -112,7 +112,7 @@ All variables without defaults **must** be supplied — either via `terraform.tf
 | `lambda_timeout_sec` | `300` | Lambda timeout in seconds |
 | `watch_max_attempts` | `11` | Max Lambda invocations before Step Functions gives up (07:19 + 11 min = 07:30) |
 | `schedule_cron` | `cron(19 7 ? * MON-FRI *)` | EventBridge cron for daily registration (Europe/Berlin timezone) |
-| `summary_schedule_cron` | `cron(0 17 ? * FRI *)` | EventBridge cron for Friday weekly summary email (Europe/Berlin timezone) |
+| `summary_schedule_cron` | `cron(0 17 ? * 6 *)` | EventBridge cron for Friday weekly summary email (Europe/Berlin timezone) |
 | `test_doodle_url` | `""` | Optional Doodle URL for test executions — leave empty in production |
 | `debug_mode` | `false` | Run Chromium in headed mode — only works with a display, keep false in Lambda |
 
