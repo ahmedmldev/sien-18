@@ -538,9 +538,196 @@ def send_notification(service, result: dict, doodle_url: str):
         log.error(f"Failed to send notification: {exc}")
 
 
+# ── Weekly summary ─────────────────────────────────────────────────────────────
+
+SFN_STATE_MACHINE_NAME = "kita-bot"
+
+_DAY_DE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"]
+
+def _sfn_client():
+    import boto3
+    return boto3.client("stepfunctions", region_name=os.environ.get("AWS_REGION", "eu-west-1"))
+
+
+def _get_account_id() -> str:
+    import boto3
+    return boto3.client("sts", region_name=os.environ.get("AWS_REGION", "eu-west-1")) \
+                .get_caller_identity()["Account"]
+
+
+def _sm_arn() -> str:
+    region = os.environ.get("AWS_REGION", "eu-west-1")
+    account = _get_account_id()
+    return f"arn:aws:states:{region}:{account}:stateMachine:{SFN_STATE_MACHINE_NAME}"
+
+
+def _get_week_executions() -> list[dict]:
+    """Return all Step Functions executions that started this Mon–Fri (Berlin time)."""
+    from zoneinfo import ZoneInfo
+    from datetime import timezone, timedelta
+
+    berlin = ZoneInfo("Europe/Berlin")
+    now = datetime.now(berlin)
+    monday = now - timedelta(days=now.weekday())
+    week_start = monday.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    executions = []
+    paginator = _sfn_client().get_paginator("list_executions")
+    for page in paginator.paginate(stateMachineArn=_sm_arn()):
+        for ex in page["executions"]:
+            start = ex["startDate"]
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=timezone.utc)
+            if start < week_start:
+                return executions  # list_executions is newest-first; nothing older needed
+            executions.append(ex)
+    return executions
+
+
+def _classify_execution(ex: dict) -> str:
+    """Map an execution to a bot action string via DescribeExecution for accuracy."""
+    status = ex.get("status", "")
+    if status == "RUNNING":
+        return "running"
+    if status == "ABORTED":
+        return "aborted"
+    if status == "SUCCEEDED":
+        try:
+            sfn = _sfn_client()
+            detail = sfn.describe_execution(executionArn=ex["executionArn"])
+            output = json.loads(detail.get("output") or "{}")
+            action = output.get("action", "submitted")
+            if action in ("already_registered", "submitted_unverified", "dry_run"):
+                return action
+        except Exception:
+            pass
+        return "submitted"
+    if status == "FAILED":
+        try:
+            sfn = _sfn_client()
+            detail = sfn.describe_execution(executionArn=ex["executionArn"])
+            cause = (detail.get("cause") or "").lower()
+            if "noseats" in cause or "no seats" in cause:
+                return "no_seats"
+            if "deadline" in cause:
+                return "deadline_reached"
+        except Exception:
+            pass
+        return "failed"
+    return "unknown"
+
+
+def _build_weekly_summary_body(executions: list[dict]) -> str:
+    from zoneinfo import ZoneInfo
+    from datetime import timezone, timedelta
+
+    berlin = ZoneInfo("Europe/Berlin")
+    now = datetime.now(berlin)
+    monday = now - timedelta(days=now.weekday())
+
+    day_results: dict[int, str] = {}  # weekday index (0=Mon) → action
+    for ex in executions:
+        start = ex["startDate"]
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+        start_berlin = start.astimezone(berlin)
+        wd = start_berlin.weekday()
+        if wd not in day_results:
+            day_results[wd] = _classify_execution(ex)
+
+    lines = []
+    registered_count = 0
+    for wd in range(5):  # Mon–Fri
+        day_name = _DAY_DE[wd]
+        day_date = (monday + timedelta(days=wd)).strftime("%d.%m.")
+        action = day_results.get(wd)
+
+        if action is None:
+            line = f"  {day_name} ({day_date}): 😴 Kein Einsatz — wahrscheinlich Feiertag oder die Kita macht einfach was sie will."
+        elif action == "submitted":
+            registered_count += 1
+            line = f"  {day_name} ({day_date}): ✅ Dalia wurde erfolgreich abgeliefert. Bot 1 – Chaos 0."
+        elif action == "submitted_unverified":
+            registered_count += 1
+            line = f"  {day_name} ({day_date}): ✅ Dalia wurde angemeldet (vermutlich). Der Bot ist sich zu 90% sicher."
+        elif action == "already_registered":
+            registered_count += 1
+            line = f"  {day_name} ({day_date}): 🤦 Dalia war schon angemeldet. Eltern: bitte nicht doppelt buchen."
+        elif action == "deadline_reached":
+            line = (
+                f"  {day_name} ({day_date}): 🚶 Keine E-Mail von der Kita. Dalia ist höchstwahrscheinlich "
+                f"einfach selbst hingegangen — ohne Erlaubnis, ohne Doodle, ohne uns."
+            )
+        elif action == "no_seats":
+            line = f"  {day_name} ({day_date}): 😬 Kein Platz mehr. Dalia musste draußen warten. Peinlich."
+        elif action == "aborted":
+            line = f"  {day_name} ({day_date}): ⚡ Ausführung abgebrochen. Jemand hat den Stecker gezogen."
+        elif action == "running":
+            line = f"  {day_name} ({day_date}): ⏳ Läuft noch... Geduld ist eine Tugend."
+        elif action == "failed":
+            line = f"  {day_name} ({day_date}): 💥 Unerwarteter Fehler. Der Bot hat kurz das Bewusstsein verloren."
+        else:
+            line = f"  {day_name} ({day_date}): 🤷 Unbekanntes Schicksal. Der Bot schweigt."
+        lines.append(line)
+
+    week_str = f"{(monday).strftime('%d.%m.')}–{(monday + timedelta(days=4)).strftime('%d.%m.%Y')}"
+
+    if registered_count == 5:
+        verdict = "🏆 Perfekte Woche! Dalia war jeden Tag brav in der Kita. Der Bot verdient Urlaub."
+    elif registered_count > 0:
+        verdict = f"📊 {registered_count} von 5 Tagen erfolgreich angemeldet. Nicht schlecht, aber der Bot hat schon bessere Zeiten gesehen."
+    else:
+        verdict = "🤖 Null Anmeldungen diese Woche. Entweder war die Kita zu oder Dalia regelt das selbst."
+
+    body = (
+        f"Hallo zusammen,\n\n"
+        f"Hier ist der Wochenbericht von Sien-18 für die Woche {week_str}:\n\n"
+        + "\n".join(lines)
+        + f"\n\n{verdict}\n\n"
+        f"In tiefer Pflichterfüllung,\n"
+        f"Sien-18 🤖\n"
+        f"(offiziell zuständig für Dalias Kita-Logistik seit 2026)\n"
+    )
+    return body
+
+
+def send_weekly_summary(service, body: str):
+    from zoneinfo import ZoneInfo
+
+    now = datetime.now(ZoneInfo("Europe/Berlin"))
+    week_str = now.strftime("KW %V · %d.%m.%Y")
+
+    msg = email.message.EmailMessage()
+    msg["From"] = "me"
+    msg["To"] = ", ".join(NOTIFY_RECIPIENTS)
+    msg["Subject"] = f"Sien-18 Wochenbericht 📋 {week_str}"
+    msg.set_content(body)
+
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    try:
+        service.users().messages().send(userId="me", body={"raw": raw}).execute()
+        log.info(f"Weekly summary sent to {NOTIFY_RECIPIENTS}.")
+    except Exception as exc:
+        log.error(f"Failed to send weekly summary: {exc}")
+
+
+def weekly_summary_handler(event: dict, context) -> dict:
+    log.info("=== Sien-18 weekly summary starting ===")
+    service = get_gmail_service()
+    executions = _get_week_executions()
+    log.info(f"Found {len(executions)} execution(s) this week.")
+    body = _build_weekly_summary_body(executions)
+    log.info(f"Summary body:\n{body}")
+    send_weekly_summary(service, body)
+    return {"action": "weekly_summary_sent", "executions": len(executions)}
+
+
 # ── Lambda entry point ─────────────────────────────────────────────────────────
 
 def handler(event: dict, context) -> dict:
+    if event.get("weekly_summary"):
+        return weekly_summary_handler(event, context)
+
     attempt = event.get("attempt", 0)
     # Event values take precedence; env vars allow direct Lambda console testing
     url     = event.get("url") or os.environ.get("URL") or None

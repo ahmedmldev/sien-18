@@ -90,10 +90,44 @@ resource "aws_iam_role_policy" "scheduler_start_sfn" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "states:StartExecution"
-      Resource = aws_sfn_state_machine.kita_bot.arn
-    }]
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "states:StartExecution"
+        Resource = aws_sfn_state_machine.kita_bot.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = "lambda:InvokeFunction"
+        Resource = aws_lambda_function.kita_bot.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_sfn_read" {
+  name = "kita-bot-sfn-read"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "states:ListExecutions"
+        Resource = aws_sfn_state_machine.kita_bot.arn
+      },
+      {
+        # DescribeExecution requires execution ARN (not state machine ARN)
+        Effect   = "Allow"
+        Action   = "states:DescribeExecution"
+        Resource = replace(aws_sfn_state_machine.kita_bot.arn, ":stateMachine:", ":execution:") + ":*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = "sts:GetCallerIdentity"
+        Resource = "*"
+      }
+    ]
   })
 }
