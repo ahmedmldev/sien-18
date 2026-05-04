@@ -38,6 +38,8 @@ jobs:
 
       - name: Create tfvars from secrets
         working-directory: terraform
+        env:
+          SCHEDULE_CRON: ${{ secrets.SCHEDULE_CRON }}
         run: |
           cat > terraform.tfvars <<EOF
           child_name            = "${{ secrets.CHILD_NAME }}"
@@ -46,6 +48,7 @@ jobs:
           notify_recipients     = "${{ secrets.NOTIFY_RECIPIENTS }}"
           kita_sender           = "${{ secrets.KITA_SENDER }}"
           kita_subject_keywords = "${{ secrets.KITA_SUBJECT_KEYWORDS }}"
+          schedule_cron         = "${SCHEDULE_CRON:-cron(19 7 ? * MON-FRI *)}"
           EOF
 
       - name: Terraform Plan
@@ -110,6 +113,8 @@ jobs:
 
       - name: Create tfvars from secrets
         working-directory: terraform
+        env:
+          SCHEDULE_CRON: ${{ secrets.SCHEDULE_CRON }}
         run: |
           cat > terraform.tfvars <<EOF
           child_name            = "${{ secrets.CHILD_NAME }}"
@@ -118,6 +123,7 @@ jobs:
           notify_recipients     = "${{ secrets.NOTIFY_RECIPIENTS }}"
           kita_sender           = "${{ secrets.KITA_SENDER }}"
           kita_subject_keywords = "${{ secrets.KITA_SUBJECT_KEYWORDS }}"
+          schedule_cron         = "${SCHEDULE_CRON:-cron(19 7 ? * MON-FRI *)}"
           EOF
 
       - name: Terraform Apply
