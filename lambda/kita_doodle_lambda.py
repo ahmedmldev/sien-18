@@ -712,6 +712,12 @@ def send_weekly_summary(service, body: str):
 
 
 def weekly_summary_handler(event: dict, context) -> dict:
+    from zoneinfo import ZoneInfo
+    now = datetime.now(ZoneInfo("Europe/Berlin"))
+    if now.weekday() != 4:  # 4 = Friday; schedule fires Mon-Fri but we only send on Friday
+        log.info(f"Skipping weekly summary — today is {_DAY_DE[now.weekday()]}, not Friday.")
+        return {"action": "skipped_not_friday"}
+
     log.info("=== Sien-18 weekly summary starting ===")
     service = get_gmail_service()
     executions = _get_week_executions()

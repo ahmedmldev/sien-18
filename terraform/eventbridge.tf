@@ -10,6 +10,7 @@ resource "aws_scheduler_schedule" "kita_weekly_summary" {
   }
 
   schedule_expression          = var.summary_schedule_cron
+  # Note: fires Mon–Fri but Lambda checks weekday and exits early on non-Fridays
   schedule_expression_timezone = "Europe/Berlin"
 
   target {

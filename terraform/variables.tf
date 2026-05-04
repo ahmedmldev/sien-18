@@ -68,6 +68,6 @@ variable "schedule_cron" {
 }
 
 variable "summary_schedule_cron" {
-  description = "EventBridge Scheduler cron for Friday weekly summary (Berlin timezone). Default: 17:00 every Friday."
-  default     = "cron(0 17 ? * 6 *)"
+  description = "EventBridge Scheduler cron for weekly summary trigger (Berlin timezone). Default: 17:00 Mon-Fri; Lambda skips non-Fridays internally."
+  default     = "cron(0 17 ? * MON-FRI *)"
 }
